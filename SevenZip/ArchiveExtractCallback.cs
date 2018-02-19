@@ -603,24 +603,31 @@ namespace SevenZip
 
 		#region Large Path file support
 
+		const string LongPathPrefix = @"\\?\";
+		const string UncLongPathPrefix = @"\\?\UNC\";
+		const string UncPathPrefix = @"\\";
+		static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+		const int ATTRIBUTES_DIRECTORY = 16;
+		const int ERROR_ALREADY_EXISTS = 183;
+
 		private static string ToLargePath(string path)
 		{
 			path = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
 			path = TrimEnd(path);
-			if (path.StartsWith("\\\\?\\") || path.StartsWith("\\\\?\\UNC\\"))
+			if (path.StartsWith(LongPathPrefix))
 			{
 				return path;
 			}
-			if (path.StartsWith("\\\\"))
+			if (path.StartsWith(UncPathPrefix))
 			{
-				return "\\\\?\\UNC\\" + path.Substring("\\\\".Length, path.Length - "\\\\".Length);
+				return UncLongPathPrefix + path.Substring(UncPathPrefix.Length, path.Length - UncPathPrefix.Length);
 			}
-			return "\\\\?\\" + path;
+			return LongPathPrefix + path;
 		}
 
 		private static string TrimEnd(string path)
 		{
-			while ((path.EndsWith("\\") || path.EndsWith("\\")) && !path.EndsWith(":\\"))
+			while (path.EndsWith("\\") && !path.EndsWith(":\\"))
 			{
 				path = path.Substring(0, path.Length - 1);
 			}
@@ -630,22 +637,23 @@ namespace SevenZip
 		private static bool File_Exists(string path)
 		{
 			string lpFileName = ToLargePath(path);
-			WIN32_FIND_DATA wIN32_FIND_DATA = default(WIN32_FIND_DATA);
-			IntPtr intPtr = FindFirstFile(lpFileName, out wIN32_FIND_DATA);
-			if (intPtr == new IntPtr(-1))
+			var data = new WIN32_FIND_DATA();
+			IntPtr intPtr = FindFirstFile(lpFileName, out data);
+			if (intPtr == INVALID_HANDLE_VALUE)
 			{
 				return false;
 			}
 			FindClose(intPtr);
-			return (wIN32_FIND_DATA.dwFileAttributes & 16u) == 0u;
+			// Exclude the case when a file is a directory
+			return (data.dwFileAttributes & ATTRIBUTES_DIRECTORY) == 0u;
 		}
 
 		private static FileStream File_Create(string path)
 		{
 			string lpFileName = ToLargePath(path);
-			SafeFileHandle safeFileHandle = CreateFile(lpFileName, 3u, 0u, IntPtr.Zero, 2u, 0, IntPtr.Zero);
+			SafeFileHandle safeFileHandle = CreateFile(lpFileName, (uint)FileAccess.ReadWrite, (uint)FileShare.None, IntPtr.Zero, (uint)FileMode.Create, (uint)FileOptions.None, IntPtr.Zero);
 			int lastWin32Error = Marshal.GetLastWin32Error();
-			if ((lastWin32Error > 0 && lastWin32Error != 183) || safeFileHandle.IsInvalid)
+			if ((lastWin32Error > 0 && lastWin32Error != ERROR_ALREADY_EXISTS) || safeFileHandle.IsInvalid)
 			{
 				throw GetException(lastWin32Error, path);
 			}
@@ -725,41 +733,36 @@ namespace SevenZip
 		public static bool Directory_Exists(string path)
 		{
 			string filePath = ToLargePath(path) + @"\*";
-			WIN32_FIND_DATA data = new WIN32_FIND_DATA();
+			var data = new WIN32_FIND_DATA();
 			IntPtr handle = FindFirstFile(filePath, out data);
-			if (handle == new IntPtr(-1))
+			if (handle == INVALID_HANDLE_VALUE)
 			{
 				return false;
 			}
-			else
-			{
-				FindClose(handle);
-				return true;
-			}
+			FindClose(handle);
+			return true;
 		}
 
 		public static void Directory_Create(string path)
 		{
 			// create parent if needed
-			if (path.IndexOfAny(new char[] { '/', '\\' }) < 0)
+			if (path.IndexOfAny(new[] { '/', '\\' }) < 0)
 			{
 				throw new ArgumentException();
 			}
-			while (path.LastIndexOfAny(new char[] { '/', '\\' }) == path.Length)
-			{
-				path = path.Substring(0, path.Length - 1);
-			}
 
-			string parentPath = path.Substring(0, path.LastIndexOfAny(new char[] { '/', '\\' }));
+			path = path.TrimEnd('/', '\\');
+
+			string parentPath = path.Substring(0, path.LastIndexOfAny(new[] { '/', '\\' }));
 			if (!Directory_Exists(parentPath))
 			{
 				Directory_Create(parentPath);
 			}
 			path = ToLargePath(path);
-			if (!CreateDirectory(ToLargePath(path), IntPtr.Zero))
+			if (!CreateDirectory(path, IntPtr.Zero))
 			{
 				int iError = Marshal.GetLastWin32Error();
-				if (iError != 183)
+				if (iError != ERROR_ALREADY_EXISTS)
 				{ //skip path already exists exception
 					throw GetException(iError, path);
 				}
