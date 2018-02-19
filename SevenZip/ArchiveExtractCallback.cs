@@ -385,7 +385,7 @@ namespace SevenZip
                         {
                             #region Branch
 
-                            if (!Directory.Exists(fileName))
+                            if (!Directory_Exists(fileName))
                             {
                                 try
                                 {
@@ -439,7 +439,7 @@ namespace SevenZip
                         {
                             try
                             {
-                                File.Delete(fileName);
+                                File_Delete(fileName);
                             }
                             catch (Exception e)
                             {
@@ -592,7 +592,7 @@ namespace SevenZip
                 for (int i = 1; i < splittedFileName.Count - 1; i++)
                 {
                     tfn += Path.DirectorySeparatorChar + splittedFileName[i];
-                    if (!Directory.Exists(tfn))
+                    if (!Directory_Exists(tfn))
                     {
                         Directory_Create(tfn);
                     }
