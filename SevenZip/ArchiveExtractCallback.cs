@@ -652,7 +652,6 @@ namespace SevenZip
 			return new FileStream(safeFileHandle, FileAccess.ReadWrite);
 		}
 
-		// ZyLAB.LargePaths.LargePathFile
 		public static void File_Delete(string path)
 		{
 			if (!DeleteFile(ToLargePath(path)))
@@ -662,7 +661,6 @@ namespace SevenZip
 			}
 		}
 
-		// ZyLAB.LargePaths.WinIOError
 		public static Exception GetException(int errorCode, string path)
 		{
 			switch (errorCode)
